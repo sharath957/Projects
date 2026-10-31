@@ -1,0 +1,37 @@
+{
+  "account_size_usd": 1000,
+  "max_loss_per_trade_usd": 15,
+  "max_daily_loss_usd": 50,
+  "max_trades_per_day": 3,
+  "fx_fee_pct_per_side": 1.5,
+  "max_candidates_per_run": 10,
+  "day": {
+    "enabled": true,
+    "scan_times_et": ["09:50", "10:05", "10:20", "10:35"],
+    "max_signal_age_min": 20,
+    "stop": "or-mid",
+    "target": "2R",
+    "timemachine": true,
+    "alert_every_min": 2,
+    "flat_by": "15:55",
+    "min_price": 5
+  },
+  "swing": {
+    "enabled": true,
+    "stop": "pct:5",
+    "target": "2R",
+    "entry_time_et": "09:50",
+    "max_hold_days": 20,
+    "min_price": 5,
+    "min_volume": 1000000
+  },
+  "ntfy": {
+    "server": "https://ntfy.sh",
+    "topic_env": "NTFY_TOPIC"
+  },
+  "notion": {
+    "enabled": false,
+    "token_env": "NOTION_TOKEN",
+    "database_id": ""
+  }
+}

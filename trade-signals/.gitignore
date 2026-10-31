@@ -1,0 +1,7 @@
+# your settings and secrets
+.env
+config.json
+# the log, work folders and run logs live on your Mac only
+data/
+__pycache__/
+*.pyc
