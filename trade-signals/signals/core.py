@@ -18,7 +18,8 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 VENDOR = os.path.join(ROOT, "vendor", "day-trader-skill")
 DATA = os.path.join(ROOT, "data")
 ET = ZoneInfo("America/New_York")
-PT = ZoneInfo("America/Vancouver")
+# Local (Vancouver) time is read from the Mac's own clock, never hard-coded: BC stays on UTC-7 all year
+# since March 2026 while New York changes clocks, so the New York gap is 2 hours in winter, 3 in summer.
 
 SCRIPTS = {
     "scan": os.path.join(VENDOR, "trader-scanner", "scan.py"),
@@ -153,7 +154,14 @@ def parse_et(day, hhmm):
 
 
 def pt_label(t):
-    return t.astimezone(PT).strftime("%Y-%m-%d %H:%M PT")
+    """The time on this Mac's clock, 'YYYY-MM-DD HH:MM' plus the zone name (column names keep the old _pt)."""
+    return t.astimezone().strftime("%Y-%m-%d %H:%M %Z").strip()
+
+
+def local_hhmm(day, hhmm_et):
+    """A New York wall-clock time on a given date, as HH:MM on this Mac's clock (DST-aware for that date)."""
+    h, m = (int(x) for x in hhmm_et.split(":"))
+    return datetime.datetime(day.year, day.month, day.day, h, m, tzinfo=ET).astimezone().strftime("%H:%M")
 
 
 _scan_mod = None
@@ -229,7 +237,7 @@ def workdir(day, mode, symbol=None):
 
 
 def log(msg):
-    stamp = now_utc().astimezone(PT).strftime("%Y-%m-%d %H:%M:%S PT")
+    stamp = now_utc().astimezone().strftime("%Y-%m-%d %H:%M:%S %Z").strip()
     line = "[%s] %s" % (stamp, msg)
     print(line, flush=True)
     d = os.path.join(DATA, "logs")

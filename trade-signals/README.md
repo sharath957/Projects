@@ -9,15 +9,22 @@ with its outcome.
 **Nothing here can place an order.** Not financial advice. Log-only first: run it for
 4-6 weeks and read the results before you trade real money.
 
-## What happens on a trading day (Pacific time)
+## What happens on a trading day (Vancouver time)
 
-| Time (PT) | Mode | What runs |
-|---|---|---|
-| 6:40 AM | day | Starts. Opening-range scans at 6:50, 7:05, 7:20, 7:35 (9:50-10:35 ET) |
-| on a breakout | day | Push: buy limit, sell limit (target), stop-loss, shares, fees, Time Machine odds |
-| until 12:57 PM | day | The original price alerts: stop hit / target hit / **flat by 12:55 PM PT** |
-| 1:35 PM | swing | Daily scan after the close. Push: tickets to place **before the next open** |
-| 1:35 PM | both | Outcome tracker updates every open ticket; Notion sync |
+BC stays on UTC-7 all year (since March 2026), but New York changes its clocks. So New York is
+**2 hours ahead of Vancouver from the first Sunday of November to mid-March, and 3 hours ahead
+the rest of the year.** The tool works from New York times (the market's clock) and converts them
+with the Mac's own clock, so nothing here is hard-coded to one season. The table shows the winter gap
+(Nov 1, 2026 to Mar 13, 2027).
+
+| Time (Vancouver) | New York | Mode | What runs |
+|---|---|---|---|
+| 6:40 AM | 8:40 AM | day | The job starts and waits (in summer the wait is 10 minutes) |
+| 7:50, 8:05, 8:20, 8:35 AM | 9:50, 10:05, 10:20, 10:35 | day | Opening-range scans |
+| on a breakout | | day | Push: buy limit, sell limit (target), stop-loss, shares, fees, Time Machine odds |
+| until 2:00 PM | until 4:00 PM | day | The original price alerts: stop hit / target hit / **flat by 1:55 PM (3:55 PM New York)** |
+| 2:15 PM | 4:15 PM | swing | Daily scan after the close (earliest 2:10 PM). Push: tickets to place **before the next open** |
+| 2:15 PM | 4:15 PM | both | Outcome tracker updates every open ticket; Notion sync |
 
 Each mode sends at most `max_trades_per_day` (3) tickets a day and stops when the
 tickets' combined max loss reaches `max_daily_loss_usd` ($50). Each mode is treated
@@ -34,7 +41,7 @@ STOP-LOSS            $299.93
 Max loss at stop $3.54 + fees $18.05
 After 1.5% FX each way: win $-11.13 / lose $21.59 (net R:R -0.52)
 WARNING: fees eat the whole target. A 'win' loses money.
-Now (opening-range breakout). Out by 15:55 ET (12:55 PT) win or lose.
+Now (opening-range breakout). Out by 15:55 ET (13:55 your time) win or lose.
 ```
 
 That is a real ticket from the original pack's test data (Oct 19 2026). Note the
@@ -117,10 +124,10 @@ source for a dbt project.
 ## Commands
 
 ```bash
-python3 run.py day           # what the 6:40 AM job runs
+python3 run.py day           # what the 6:40 AM job runs (it waits for the scan times)
 ```
 ```bash
-python3 run.py after-close   # what the 1:35 PM job runs (swing + track + Notion)
+python3 run.py after-close   # what the 2:15 PM job runs (swing + track + Notion)
 ```
 ```bash
 python3 run.py summary

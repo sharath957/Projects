@@ -9,10 +9,16 @@ import os
 import shutil
 import sys
 import tempfile
+import time
 import unittest
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.dirname(HERE))
+
+# Vancouver is on UTC-7 all year since March 2026 (no fall-back), and the code reads the Mac's own clock.
+# Pin this process to the same fixed offset so the tests mean the same on any machine.
+os.environ["TZ"] = "Etc/GMT+7"
+time.tzset()
 
 from signals import core, notify, pipeline, store, track  # noqa: E402
 from signals.ticket import caps_check, fee_math, message  # noqa: E402
@@ -164,7 +170,7 @@ class DayPipelineOffline(TempData):
         pipeline.day_scan(self.cfg, DAY, now=now, offline={"scan": WALL, "tm": TM})
         m = notify.SENT[0]
         m["title"].encode("ascii")
-        for word in ("BUY", "SELL limit", "STOP-LOSS", "Out by 15:55 ET (12:55 PT)"):
+        for word in ("BUY", "SELL limit", "STOP-LOSS", "Out by 15:55 ET (12:55 your time)"):
             self.assertIn(word, m["body"])
 
 
@@ -196,6 +202,29 @@ class SwingPipelineOffline(TempData):
         done = [r for r in store.read_rows() if r["notified"] == "yes"]
         self.assertTrue(all(r["status"] == "target" and float(r["net_pnl_usd"]) < float(r["gross_pnl_usd"])
                             for r in done))
+
+
+class LocalClock(unittest.TestCase):
+    """New York changes its clocks and Vancouver (UTC-7 all year) does not."""
+
+    def test_new_york_is_three_hours_ahead_in_summer_two_in_winter(self):
+        self.assertEqual(core.local_hhmm(datetime.date(2026, 10, 19), "15:55"), "12:55")  # EDT, UTC-4
+        self.assertEqual(core.local_hhmm(datetime.date(2026, 11, 2), "15:55"), "13:55")   # EST, UTC-5
+        self.assertEqual(core.local_hhmm(datetime.date(2027, 3, 15), "09:50"), "06:50")   # EDT again
+        self.assertEqual(core.local_hhmm(datetime.date(2026, 11, 2), "09:50"), "07:50")
+
+    def test_labels_follow_the_clock(self):
+        t = datetime.datetime(2026, 11, 2, 9, 50, tzinfo=ET)
+        self.assertTrue(core.pt_label(t).startswith("2026-11-02 07:50"))
+
+    def test_winter_ticket_says_one_fifty_five(self):
+        row = {"symbol": "TSLA", "mode": "day", "setup": "orb", "shares": 3, "entry": 364.18, "position_usd": 1092.54,
+               "target": 375.9, "stop": 358.32, "max_loss_usd": 17.58, "fees_at_stop_usd": 33.0,
+               "fx_fee_pct_per_side": 1.5, "net_reward_usd": 1.2, "net_risk_usd": 33.4, "net_reward_risk": 0.04,
+               "tm_target_pct": "", "signal_id": "D20261102-TSLA", "generated_at_pt": "2026-11-02 07:50 GMT-7",
+               "flat_by_et": "15:55", "session_date": "2026-11-02", "setup": "orb"}
+        _, body = message(row)
+        self.assertIn("Out by 15:55 ET (13:55 your time)", body)
 
 
 class Calendar(unittest.TestCase):

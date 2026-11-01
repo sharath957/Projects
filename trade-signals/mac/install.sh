@@ -1,8 +1,11 @@
 #!/bin/bash
 # Installs two launchd jobs for your Mac user (no sudo):
-#   com.tradesignals.day         weekdays 6:40 AM local: opening-range scans + alerts until flat-by
-#   com.tradesignals.afterclose  weekdays 1:35 PM local: swing scan + outcome tracker + Notion sync
-# Times assume the Mac's clock is Pacific (Vancouver). Run: bash mac/install.sh
+#   com.tradesignals.day         weekdays 6:40 AM local: waits for the New York scan times, then scans + alerts until flat-by
+#   com.tradesignals.afterclose  weekdays 2:15 PM local: swing scan + outcome tracker + Notion sync
+# Times are the Mac's local clock (Vancouver). BC stays on UTC-7 all year since March 2026, so New York is 2 hours
+# ahead in winter and 3 in summer. 6:40 AM covers both (the day run just waits longer in winter), and 2:15 PM is
+# after the 4:10 PM New York earliest swing-scan time in both seasons.
+# Run: bash mac/install.sh
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -17,7 +20,7 @@ if [ -z "$PY" ]; then echo "python3 not found. Install the Xcode command line to
 TZNAME="$(readlink /etc/localtime 2>/dev/null | sed 's#.*/zoneinfo/##')"
 case "$TZNAME" in
   America/Vancouver|America/Los_Angeles|America/Tijuana) ;;
-  *) echo "WARNING: this Mac's time zone is '$TZNAME', not Pacific. The 6:40 / 13:35 schedule is local time."
+  *) echo "WARNING: this Mac's time zone is '$TZNAME', not Vancouver time. The 6:40 AM / 2:15 PM schedule uses the Mac's local clock."
      echo "         Edit the hours in this script before installing, or set the Mac to Pacific time." ;;
 esac
 
@@ -51,7 +54,7 @@ EOF
 }
 
 write_plist com.tradesignals.day 6 40 day
-write_plist com.tradesignals.afterclose 13 35 after-close
+write_plist com.tradesignals.afterclose 14 15 after-close
 
 echo
 echo "Done. Check with:  launchctl list | grep tradesignals"

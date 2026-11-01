@@ -2,6 +2,10 @@
 into one manual order ticket: the numbers you type into Wealthsimple, plus the
 currency-fee math the originals do not know about."""
 
+import datetime
+
+from .core import local_hhmm
+
 FIELDS = [
     "signal_id", "mode", "generated_at_pt", "generated_at_et", "session_date", "symbol", "setup",
     "order_type", "entry", "stop", "target", "risk_per_share", "reward_risk",
@@ -104,8 +108,8 @@ def message(row):
     sym, mode = row["symbol"], row["mode"]
     if mode == "day":
         title = "DAY %s: buy signal %s" % (sym, row["generated_at_pt"][11:16])
-        when = "Now (opening-range breakout). Out by %s ET (%s PT) win or lose." % (
-            row["flat_by_et"], _et_to_pt_hhmm(row["flat_by_et"]))
+        when = "Now (opening-range breakout). Out by %s ET (%s your time) win or lose." % (
+            row["flat_by_et"], local_hhmm(datetime.date.fromisoformat(row["session_date"]), row["flat_by_et"]))
     else:
         title = "SWING %s: buy signal for %s" % (sym, row["session_date"])
         when = "Place before the open on %s (day order)." % row["session_date"]
@@ -130,10 +134,3 @@ def message(row):
     lines.append(when)
     lines.append("Log-only: your call. Not advice. id %s" % row["signal_id"])
     return title, "\n".join(lines)
-
-
-def _et_to_pt_hhmm(hhmm):
-    if not hhmm:
-        return ""
-    h, m = (int(x) for x in hhmm.split(":"))
-    return "%d:%02d" % ((h - 3) % 24, m)  # New York and Vancouver change clocks on the same dates

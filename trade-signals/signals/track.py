@@ -15,7 +15,7 @@ import json
 import urllib.request
 
 from . import store
-from .core import ET, PT, load_config, log, now_utc, parse_et, to_et
+from .core import ET, load_config, log, now_utc, parse_et, to_et
 from .ticket import OPEN
 
 UA = "Mozilla/5.0 (compatible; trade-signals/1.0)"

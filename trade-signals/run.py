@@ -3,10 +3,10 @@
 place by hand in Wealthsimple, with every ticket logged. Nothing here can place
 an order.
 
-    python3 run.py day            # 6:40 AM PT: opening-range scans, tickets, alerts until flat-by
+    python3 run.py day            # start 6:40 AM local: waits for the scans, then tickets and alerts until flat-by
     python3 run.py swing          # after the close: daily scan, tickets for the next session
     python3 run.py track          # outcomes for open tickets (after the close)
-    python3 run.py after-close    # swing + track + notion sync (what the 1:35 PM PT schedule runs)
+    python3 run.py after-close    # swing + track + notion sync (what the 2:15 PM local schedule runs)
     python3 run.py test-notify    # send one test push to your phone
     python3 run.py notion-init PAGE_ID   # create the Notion database under a page
     python3 run.py notion-sync    # copy data/signals.csv to Notion
