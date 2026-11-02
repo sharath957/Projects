@@ -14,7 +14,7 @@ import os
 import time
 
 from . import notify, store
-from .core import (DATA, early_close, et_label, load_config, log, next_trading_day, now_utc, original_config,
+from .core import (DATA, early_close, et_label, load_config, local_hhmm, log, next_trading_day, now_utc, original_config,
                    parse_et, pt_label, run_tool, to_et, trading_day, workdir, write_json, WrapperError)
 from .ticket import build_row, caps_check, message
 
@@ -132,18 +132,23 @@ def handle_hits(mode, hits, session_day, cfg, now=None, offline_tm=None, max_age
                     row["notified"], row["notes"], row["status"] = "no", cap, "capped"
                 else:
                     title, body = message(row)
-                    notify.send(cfg, title, body, priority="high" if mode == "day" else "default",
-                                tags="chart_with_upwards_trend")
-                    row["notified"] = "yes"
-                    if mode == "day":
+                    ok = notify.send(cfg, title, body, priority="high" if mode == "day" else "default",
+                                     tags="chart_with_upwards_trend")
+                    row["notified"] = "yes" if ok else "failed"
+                    if ok and mode == "day":
                         run_tool("alerts", ["add", "--from-plan"], cwd=workdir(session_day, mode, row["symbol"]))
             else:
                 row["notified"] = "no"
             srow = store.stringify(row)
             today_rows.append(srow)
             out.append(srow)
-            hit_rows.append(_hit_row(mode, session_day, rank, hit, "yes" if row["notified"] == "yes" else
-                                     "no: " + (row["risk_reasons"] or row["notes"] or row["status"])[:120], now))
+            if row["notified"] == "yes":
+                shown = "yes"
+            elif row["notified"] == "failed":
+                shown = "no: push failed (the ticket is in signals.csv)"
+            else:
+                shown = "no: " + (row["risk_reasons"] or row["notes"] or row["status"])[:120]
+            hit_rows.append(_hit_row(mode, session_day, rank, hit, shown, now))
             log("%s %s: %s %s" % (mode, row["symbol"], row["risk_check"], row["notified"]))
         store.append_rows(out)
     store.append_rows(hit_rows, store.HITS, store.HIT_FIELDS)
@@ -188,22 +193,47 @@ def run_day(cfg=None, sleep=time.sleep):
         log("No day run: %s." % why)
         return 0
     times = list(cfg["day"]["scan_times_et"])
+    log("Day run started: scans at %s ET (%s on this Mac's clock)." % (
+        ", ".join(times), ", ".join(local_hhmm(today, t) for t in times)))
     if early_close(today):
         log("Early close today (1:00 PM ET): scans run as usual, flat-by moves up.")
+    skipped = []
     for hhmm in times:
         at = parse_et(today, hhmm)
         wait = (at - now_utc()).total_seconds()
         if wait < -10 * 60:
+            skipped.append(hhmm)
+            log("Skipped the %s ET scan: it is already %d minutes past." % (hhmm, int(-wait // 60)))
             continue  # started late: skip scans that are long past
         if wait > 0:
-            sleep(wait)
+            log("Waiting for the %s ET scan (%s on this Mac's clock)." % (hhmm, local_hhmm(today, hhmm)))
+            wait_until(at, sleep)
+        elif wait < -60:
+            log("Running the %s ET scan %d minutes late." % (hhmm, int(-wait // 60)))
         try:
             day_scan(cfg, today)
         except Exception as e:
             log("Day scan at %s failed: %s" % (hhmm, e))
             notify.send(cfg, "trade-signals: day scan failed %s ET" % hhmm, str(e)[:500], tags="warning")
+    if skipped:
+        msg = ("Skipped the %s ET scan(s) because the run started or woke too late. Check that the Mac was awake "
+               "(not just plugged in) from 6:40 AM, with the lid open." % ", ".join(skipped))
+        log(msg)
+        notify.send(cfg, "trade-signals: missed day scans", msg, tags="warning")
     monitor_alerts(cfg, today, sleep)
     return 0
+
+
+def wait_until(target, sleep=time.sleep, clock=now_utc, step=30):
+    """Sleep until the real clock reaches `target`, in steps of at most `step` seconds.
+
+    One long sleep is not safe on a laptop: the sleep timer does not count the time the Mac spends asleep, so a
+    nap of 17 minutes delays the wake-up by 17 minutes. Short sleeps that re-read the wall clock recover at once."""
+    while True:
+        remaining = (target - clock()).total_seconds()
+        if remaining <= 0:
+            return
+        sleep(min(step, remaining))
 
 
 def monitor_alerts(cfg, day, sleep=time.sleep):

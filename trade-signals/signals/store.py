@@ -6,9 +6,10 @@ import contextlib
 import csv
 import fcntl
 import os
+import shutil
 
 from .core import DATA
-from .ticket import FIELDS
+from .ticket import ALIASES, FIELDS
 
 SIGNALS = os.path.join(DATA, "signals.csv")
 HITS = os.path.join(DATA, "scan_hits.csv")
@@ -29,11 +30,28 @@ def locked(path=None):
 
 
 def read_rows(path=None):
+    """Rows as dicts. Older column names are mapped to the current ones, so a file written before the rename reads fine."""
     path = path or SIGNALS
     if not os.path.exists(path):
         return []
     with open(path, newline="", encoding="utf-8") as fh:
-        return list(csv.DictReader(fh))
+        return [{ALIASES.get(k, k): v for k, v in r.items()} for r in csv.DictReader(fh)]
+
+
+def _migrate(path, fields):
+    """If the file's header differs from `fields` (an older version wrote it), rewrite it with the current header.
+    Old column names are carried over through ALIASES. A copy of the old file is kept next to it once."""
+    if not os.path.exists(path):
+        return
+    with open(path, newline="", encoding="utf-8") as fh:
+        header = csv.DictReader(fh).fieldnames or []
+    if list(header) == list(fields):
+        return
+    rows = read_rows(path)
+    backup = path + ".before-rename.bak"
+    if not os.path.exists(backup):
+        shutil.copy2(path, backup)
+    write_rows(rows, path, fields)
 
 
 def write_rows(rows, path=None, fields=FIELDS):
@@ -50,6 +68,7 @@ def write_rows(rows, path=None, fields=FIELDS):
 
 def append_rows(rows, path=None, fields=FIELDS):
     path = path or SIGNALS
+    _migrate(path, fields)
     new = not os.path.exists(path)
     os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, "a", newline="", encoding="utf-8") as fh:

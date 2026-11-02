@@ -27,7 +27,8 @@ MY_TRADES = os.path.join(DATA, "my_trades.csv")
 COLS = {  # csv field -> (Notion property, type)
     "signal_id": ("Signal ID", "rich_text"), "mode": ("Mode", "select"), "session_date": ("Session date", "date"),
     "generated_at_pt": ("Sent (PT)", "rich_text"), "symbol": ("Symbol", "rich_text"), "setup": ("Setup", "rich_text"),
-    "entry": ("Buy limit", "number"), "stop": ("Stop-loss", "number"), "target": ("Sell limit (target)", "number"),
+    "buy_limit": ("Buy limit", "number"), "stop_loss": ("Stop-loss", "number"),
+    "sell_limit_target": ("Sell limit (target)", "number"),
     "shares": ("Shares", "number"), "position_usd": ("Position $", "number"), "max_loss_usd": ("Max loss $", "number"),
     "fees_at_target_usd": ("FX fees at target $", "number"), "fees_at_stop_usd": ("FX fees at stop $", "number"),
     "net_reward_usd": ("Net win $", "number"), "net_risk_usd": ("Net loss $", "number"),

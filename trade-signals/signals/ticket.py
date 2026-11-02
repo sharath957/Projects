@@ -8,7 +8,7 @@ from .core import local_hhmm
 
 FIELDS = [
     "signal_id", "mode", "generated_at_pt", "generated_at_et", "session_date", "symbol", "setup",
-    "order_type", "entry", "stop", "target", "risk_per_share", "reward_risk",
+    "order_type", "buy_limit", "sell_limit_target", "stop_loss", "risk_per_share", "reward_risk",
     "shares", "position_usd", "max_loss_usd", "bound_by",
     "fx_fee_pct_per_side", "fees_at_target_usd", "fees_at_stop_usd",
     "net_reward_usd", "net_risk_usd", "net_reward_risk",
@@ -19,6 +19,9 @@ FIELDS = [
 ]
 
 OPEN = "open"
+
+# Column names used before the rename (data/signals.csv written by earlier versions)
+ALIASES = {"entry": "buy_limit", "target": "sell_limit_target", "stop": "stop_loss"}
 
 
 def r2(x):
@@ -52,7 +55,7 @@ def build_row(mode, signal_id, generated_utc, session_date, plan, sizing, order,
         "generated_at_pt": pt, "generated_at_et": et,
         "session_date": session_date.isoformat(), "symbol": plan["symbol"], "setup": plan.get("setup", ""),
         "order_type": s.get("order_type", "limit"),
-        "entry": r2(entry), "stop": r2(stop), "target": r2(target),
+        "buy_limit": r2(entry), "sell_limit_target": r2(target), "stop_loss": r2(stop),
         "risk_per_share": r2(plan.get("risk_per_share")), "reward_risk": plan.get("reward_risk"),
         "shares": shares, "position_usd": r2(shares * entry), "max_loss_usd": r2(s.get("max_loss")),
         "bound_by": s.get("bound_by", ""),
@@ -115,9 +118,9 @@ def message(row):
         when = "Place before the open on %s (day order)." % row["session_date"]
     lines = [
         "%s  %s" % (sym, row["setup"]),
-        "BUY  %s sh  limit %s  (~%s)" % (row["shares"], money(row["entry"]), money(row["position_usd"])),
-        "SELL limit (target)  %s" % money(row["target"]),
-        "STOP-LOSS            %s" % money(row["stop"]),
+        "BUY  %s sh  limit %s  (~%s)" % (row["shares"], money(row["buy_limit"]), money(row["position_usd"])),
+        "SELL limit (target)  %s" % money(row["sell_limit_target"]),
+        "STOP-LOSS            %s" % money(row["stop_loss"]),
         "Max loss at stop %s + fees %s" % (money(row["max_loss_usd"]), money(row["fees_at_stop_usd"] or 0)),
         "After %s%% FX each way: win %s / lose %s (net R:R %s)" % (
             row["fx_fee_pct_per_side"], money(row["net_reward_usd"]), money(row["net_risk_usd"]),

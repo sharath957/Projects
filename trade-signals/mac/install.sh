@@ -39,7 +39,7 @@ write_plist () {  # label hour minute command
 <plist version="1.0"><dict>
   <key>Label</key><string>$label</string>
   <key>ProgramArguments</key><array>
-    <string>/usr/bin/caffeinate</string><string>-i</string>
+    <string>/usr/bin/caffeinate</string><string>-i</string><string>-s</string>
     <string>$PY</string><string>$ROOT/run.py</string><string>$cmd</string>
   </array>
   <key>WorkingDirectory</key><string>$ROOT</string>

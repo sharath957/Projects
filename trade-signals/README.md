@@ -89,13 +89,17 @@ Every raw scanner hit is kept in `data/scan_hits.csv`.
      python3 run.py notion-init PAGE_ID
      ```
    - Put the printed ID in `config.json` under `notion.database_id`, and set `notion.enabled` to `true`.
-5. **Keep the Mac awake on trading mornings** (needs your password):
-   ```bash
-   sudo pmset repeat wakeorpoweron MTWRF 06:30:00
-   ```
-   The jobs run under `caffeinate`, so the Mac stays awake while they run. If the lid is
-   closed and it sleeps anyway, launchd runs the job when it wakes, and scans that are
-   more than 10 minutes late are skipped.
+5. **Keep the Mac awake on trading mornings.** The Mac has to be awake, not just plugged in, from 6:40 AM
+   until about 2:20 PM. A Mac that is asleep when the job starts can nap straight through a scan. On
+   Monday Nov 2 2026 a Mac in Maintenance Sleep lost about 17 minutes and the first scan ran late.
+   - Leave the lid open and keep it plugged in. The jobs run under `caffeinate -i -s` (no idle sleep, and no
+     system sleep on AC power) once they start.
+   - The day run now waits in 30-second steps against the real clock, so a nap no longer delays a scan after the
+     Mac wakes. A scan more than 10 minutes late is skipped, and you get a "missed day scans" push.
+   - Optional (needs your password), to wake the Mac at 6:30 AM:
+     ```bash
+     sudo pmset repeat wakeorpoweron MTWRF 06:30:00
+     ```
 
 To remove the schedule: `bash mac/uninstall.sh`. Your log stays.
 
@@ -106,8 +110,9 @@ Notion is a copy of it.
 
 | Group | Columns |
 |---|---|
-| Ticket | `signal_id, mode, generated_at_pt/et, session_date, symbol, setup, entry, stop, target, shares, position_usd, max_loss_usd` |
+| Ticket | `signal_id, mode, generated_at_pt (your Mac's local time) / generated_at_et, session_date, symbol, setup, buy_limit, sell_limit_target, stop_loss, shares, position_usd, max_loss_usd` |
 | Fees | `fx_fee_pct_per_side, fees_at_target_usd, fees_at_stop_usd, net_reward_usd, net_risk_usd, net_reward_risk` |
+| Sent? | `notified`: `yes` (the push reached ntfy), `failed` (it did not), `no` (blocked or capped) |
 | Original checks | `risk_check (PASS/BLOCK), risk_reasons, tm_target_pct, tm_stop_pct, tm_neither_pct, tm_verdict, history_summary` |
 | Outcome (tracker) | `status (open / target / stop / flat / expired / not_filled / blocked / capped), status_at, exit_price, gross_pnl_usd, fees_usd, net_pnl_usd, r_gross, r_net` |
 

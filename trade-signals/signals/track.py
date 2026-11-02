@@ -59,7 +59,7 @@ def eval_day(row, bars):
     day = datetime.date.fromisoformat(row["session_date"])
     trig = datetime.datetime.strptime(row["generated_at_et"][:16], "%Y-%m-%d %H:%M").replace(tzinfo=ET)
     flat = parse_et(day, row["flat_by_et"] or "15:55")
-    entry, stop, target = float(row["entry"]), float(row["stop"]), float(row["target"])
+    entry, stop, target = float(row["buy_limit"]), float(row["stop_loss"]), float(row["sell_limit_target"])
     # Conservative: you see the push at generated_at, so only bars that START after it count.
     after = [b for b in bars if b["t"].date() == day and b["t"] >= trig
              and b["t"] + datetime.timedelta(minutes=5) <= flat]
@@ -80,7 +80,7 @@ def eval_day(row, bars):
 def eval_swing(row, bars, max_hold_days, today):
     """bars: daily bars from the session date on. Returns the update dict, or None while still open."""
     day = datetime.date.fromisoformat(row["session_date"])
-    entry, stop, target = float(row["entry"]), float(row["stop"]), float(row["target"])
+    entry, stop, target = float(row["buy_limit"]), float(row["stop_loss"]), float(row["sell_limit_target"])
     days = [b for b in bars if b["t"].date() >= day]
     if not days or days[0]["t"].date() != day:
         return None if today <= day else {"status": "no_data", "status_at": today.isoformat()}
@@ -100,7 +100,7 @@ def eval_swing(row, bars, max_hold_days, today):
 
 def _closed(status, exit_price, t, row):
     q = int(float(row["shares"] or 0))
-    entry = float(row["entry"])
+    entry = float(row["buy_limit"])
     f = float(row["fx_fee_pct_per_side"] or 0) / 100.0
     gross = q * (exit_price - entry)
     fees = f * q * (entry + exit_price)

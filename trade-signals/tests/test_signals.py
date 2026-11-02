@@ -20,6 +20,8 @@ sys.path.insert(0, os.path.dirname(HERE))
 os.environ["TZ"] = "Etc/GMT+7"
 time.tzset()
 
+from unittest import mock  # noqa: E402
+
 from signals import core, notify, pipeline, store, track  # noqa: E402
 from signals.ticket import caps_check, fee_math, message  # noqa: E402
 
@@ -89,7 +91,7 @@ def bars(day, start, rows, minutes=5):
 
 DAY = datetime.date(2026, 10, 19)
 DAY_ROW = {"session_date": "2026-10-19", "generated_at_et": "2026-10-19 10:15 ET", "flat_by_et": "15:55",
-           "entry": "100", "stop": "98", "target": "104", "shares": "2", "risk_per_share": "2",
+           "buy_limit": "100", "stop_loss": "98", "sell_limit_target": "104", "shares": "2", "risk_per_share": "2",
            "fx_fee_pct_per_side": "1.5"}
 
 
@@ -120,7 +122,7 @@ class TrackDay(unittest.TestCase):
         self.assertEqual(u["status_at"], "2026-10-19 15:55 ET")
 
 
-SW = {"session_date": "2026-10-20", "entry": "50", "stop": "47.5", "target": "55", "shares": "4",
+SW = {"session_date": "2026-10-20", "buy_limit": "50", "stop_loss": "47.5", "sell_limit_target": "55", "shares": "4",
       "risk_per_share": "2.5", "fx_fee_pct_per_side": "1.5"}
 
 
@@ -153,8 +155,8 @@ class DayPipelineOffline(TempData):
         for r in sent:
             self.assertEqual(r["risk_check"], "PASS")
             self.assertLessEqual(float(r["max_loss_usd"]), 15)
-            self.assertLess(float(r["stop"]), float(r["entry"]))
-            self.assertGreater(float(r["target"]), float(r["entry"]))
+            self.assertLess(float(r["stop_loss"]), float(r["buy_limit"]))
+            self.assertGreater(float(r["sell_limit_target"]), float(r["buy_limit"]))
         blocked = [r for r in rows if r["risk_check"] == "BLOCK"]
         self.assertTrue(all(r["notified"] == "no" and r["risk_reasons"] for r in blocked))
         hits = store.read_rows(store.HITS)
@@ -182,7 +184,7 @@ class SwingPipelineOffline(TempData):
         self.assertEqual(len(sent), 3)
         for r in sent:
             self.assertEqual(r["session_date"], "2026-10-20")
-            self.assertAlmostEqual(float(r["stop"]), float(r["entry"]) * 0.95, delta=0.011)  # pct:5
+            self.assertAlmostEqual(float(r["stop_loss"]), float(r["buy_limit"]) * 0.95, delta=0.011)  # pct:5
             self.assertAlmostEqual(float(r["reward_risk"]), 2.0, delta=0.01)  # 2R
             self.assertNotEqual(r["setup"], "level")  # the scanner's setup names
         self.assertIn("Place before the open on 2026-10-20", notify.SENT[0]["body"])
@@ -193,7 +195,7 @@ class SwingPipelineOffline(TempData):
 
         def fake(sym, interval, start, end):
             r = next(x for x in store.read_rows() if x["symbol"] == sym)
-            e, t = float(r["entry"]), float(r["target"])
+            e, t = float(r["buy_limit"]), float(r["sell_limit_target"])
             return bars(start, (9, 30), [(e, e * 1.01, e * 0.995, e), (e, t * 1.01, e, t)], minutes=24 * 60)
 
         later = datetime.datetime(2026, 10, 21, 17, 0, tzinfo=ET)
@@ -218,13 +220,99 @@ class LocalClock(unittest.TestCase):
         self.assertTrue(core.pt_label(t).startswith("2026-11-02 07:50"))
 
     def test_winter_ticket_says_one_fifty_five(self):
-        row = {"symbol": "TSLA", "mode": "day", "setup": "orb", "shares": 3, "entry": 364.18, "position_usd": 1092.54,
-               "target": 375.9, "stop": 358.32, "max_loss_usd": 17.58, "fees_at_stop_usd": 33.0,
+        row = {"symbol": "TSLA", "mode": "day", "setup": "orb", "shares": 3, "buy_limit": 364.18, "position_usd": 1092.54,
+               "sell_limit_target": 375.9, "stop_loss": 358.32, "max_loss_usd": 17.58, "fees_at_stop_usd": 33.0,
                "fx_fee_pct_per_side": 1.5, "net_reward_usd": 1.2, "net_risk_usd": 33.4, "net_reward_risk": 0.04,
                "tm_target_pct": "", "signal_id": "D20261102-TSLA", "generated_at_pt": "2026-11-02 07:50 GMT-7",
                "flat_by_et": "15:55", "session_date": "2026-11-02", "setup": "orb"}
         _, body = message(row)
         self.assertIn("Out by 15:55 ET (13:55 your time)", body)
+
+
+class ColumnRenameMigration(TempData):
+    OLD = ("signal_id,mode,symbol,entry,stop,target,shares,status\n"
+           "D20261102-ABNB,day,ABNB,141.20,139.80,144.00,5,open\n")
+
+    def test_an_old_file_is_read_and_rewritten_without_losing_prices(self):
+        with open(store.SIGNALS, "w", encoding="utf-8") as fh:
+            fh.write(self.OLD)
+        row = store.read_rows()[0]  # old names are mapped on read
+        self.assertEqual((row["buy_limit"], row["stop_loss"], row["sell_limit_target"]), ("141.20", "139.80", "144.00"))
+        new = {k: "" for k in store.FIELDS}
+        new.update({"signal_id": "D20261102-ADI", "mode": "day", "symbol": "ADI", "buy_limit": "300.10",
+                    "stop_loss": "296.00", "sell_limit_target": "308.30", "shares": "2", "status": "open"})
+        store.append_rows([new])  # migrates the header first, then appends in the right columns
+        with open(store.SIGNALS, encoding="utf-8") as fh:
+            header = fh.readline().strip().split(",")
+        self.assertEqual(header, store.FIELDS)
+        rows = {r["symbol"]: r for r in store.read_rows()}
+        self.assertEqual(rows["ABNB"]["sell_limit_target"], "144.00")
+        self.assertEqual(rows["ADI"]["buy_limit"], "300.10")
+        self.assertEqual(rows["ADI"]["stop_loss"], "296.00")
+        self.assertTrue(os.path.exists(store.SIGNALS + ".before-rename.bak"))
+
+    def test_a_current_file_is_left_alone(self):
+        store.append_rows([{k: "x" for k in store.FIELDS}])
+        with open(store.SIGNALS, encoding="utf-8") as fh:
+            before = fh.read()
+        store.append_rows([])
+        with open(store.SIGNALS, encoding="utf-8") as fh:
+            self.assertEqual(fh.read(), before)
+        self.assertFalse(os.path.exists(store.SIGNALS + ".before-rename.bak"))
+
+
+class NapProofWait(unittest.TestCase):
+    def test_a_nap_cannot_delay_the_wake_up(self):
+        start = datetime.datetime(2026, 11, 2, 14, 0, tzinfo=datetime.timezone.utc)
+        target = start + datetime.timedelta(hours=1)
+        now = [start]
+        calls = []
+
+        def napping_sleep(seconds):  # each sleep also loses 10 minutes, as if the Mac napped
+            calls.append(seconds)
+            now[0] += datetime.timedelta(seconds=seconds + 600)
+
+        pipeline.wait_until(target, sleep=napping_sleep, clock=lambda: now[0])
+        self.assertGreaterEqual(now[0], target)
+        self.assertLessEqual(max(calls), 30)
+        self.assertLessEqual(len(calls), 8)  # ~6 naps of 10 minutes, not one 60-minute sleep that overshoots by hours
+
+    def test_no_sleep_when_the_time_has_passed(self):
+        t = datetime.datetime(2026, 11, 2, 14, 0, tzinfo=datetime.timezone.utc)
+        pipeline.wait_until(t, sleep=lambda s: self.fail("slept"), clock=lambda: t + datetime.timedelta(seconds=5))
+
+
+class PushStatusIsHonest(TempData):
+    def test_failed_push_is_recorded_as_failed_and_not_counted(self):
+        now = datetime.datetime(2026, 10, 19, 10, 15, tzinfo=ET)
+        with mock.patch.object(notify, "send", return_value=False):
+            rows = pipeline.day_scan(self.cfg, DAY, now=now, offline={"scan": WALL, "tm": TM})
+        passed = [r for r in rows if r["risk_check"] == "PASS"]
+        self.assertTrue(passed)
+        self.assertTrue(all(r["notified"] == "failed" for r in passed))
+        hits = {h["symbol"]: h for h in store.read_rows(store.HITS)}
+        self.assertTrue(all(hits[r["symbol"]]["ticketed"].startswith("no: push failed") for r in passed))
+
+    def test_send_return_values(self):
+        cfg = core.load_config("/nonexistent")
+        env = {k: v for k, v in os.environ.items() if k not in ("TRADE_SIGNALS_DRY_RUN", "NTFY_TOPIC")}
+        with mock.patch.dict(os.environ, env, clear=True):
+            self.assertFalse(notify.send(cfg, "t", "b"))  # no topic: not sent
+        with mock.patch.dict(os.environ, {"TRADE_SIGNALS_DRY_RUN": "1"}):
+            self.assertTrue(notify.send(cfg, "t", "b"))  # dry run: counts as sent in tests
+
+
+class MissedScans(TempData):
+    def test_waking_after_every_scan_logs_and_pushes_a_warning(self):
+        late = datetime.datetime(2026, 11, 2, 21, 0, tzinfo=datetime.timezone.utc)  # 4:00 PM New York
+        with mock.patch.object(pipeline, "now_utc", return_value=late):
+            self.assertEqual(pipeline.run_day(self.cfg, sleep=lambda s: self.fail("should not wait")), 0)
+        self.assertTrue(any("missed day scans" in m["title"] for m in notify.SENT))
+        logfile = [f for f in os.listdir(os.path.join(self.dir, "logs"))][0]
+        with open(os.path.join(self.dir, "logs", logfile), encoding="utf-8") as fh:
+            text = fh.read()
+        self.assertIn("Day run started", text)
+        self.assertIn("Skipped the 09:50 ET scan", text)
 
 
 class Calendar(unittest.TestCase):

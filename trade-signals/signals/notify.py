@@ -15,8 +15,11 @@ def send(cfg, title, body, priority="default", tags=""):
     n = cfg.get("ntfy") or {}
     topic = os.environ.get(n.get("topic_env") or "NTFY_TOPIC", "").strip()
     SENT.append({"title": title, "body": body, "priority": priority})
-    if not topic or os.environ.get("TRADE_SIGNALS_DRY_RUN"):
-        log("NOTIFY (dry run, no ntfy topic) %s | %s" % (title, body.replace("\n", " | ")))
+    if os.environ.get("TRADE_SIGNALS_DRY_RUN"):  # tests: count as sent, send nothing
+        log("NOTIFY (dry run) %s | %s" % (title, body.replace("\n", " | ")))
+        return True
+    if not topic:
+        log("NOTIFY SKIPPED (no ntfy topic in .env) %s | %s" % (title, body.replace("\n", " | ")))
         return False
     url = "%s/%s" % ((n.get("server") or "https://ntfy.sh").rstrip("/"), topic)
     req = urllib.request.Request(url, data=body.encode("utf-8"), method="POST")
